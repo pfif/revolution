@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synapse
+spec:
+  selector:
+    matchLabels:
+      app: synapse
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: synapse
+    spec:
+      hostname: america
+      containers:
+      - name: synapse
+        image: matrixdotorg/synapse
+        ports:
+        - containerPort: 8008
+          name: server-port
+        volumeMounts:
+          - mountPath: /data/
+            name: synapse-data
+          - mountPath: /data/homeserver.yaml
+            subPath: homeserver.yaml
+            name: synapse-config-map
+          - mountPath: /data/america.log.config
+            subPath: america.log.config
+            name: synapse-config-map
+          - mountPath: /data/america.signing.key
+            subPath: america.signing.key
+            name: synapse-config-map
+      - name: riot
+        ports:
+        - containerPort: 80
+          name: client-port
+        image: vectorim/riot-web
+      volumes:
+      - emptyDir:
+        name: synapse-data
+      - configMap:
+          name: synapse-america-config-map
+        name: synapse-config-map
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: america-service
+  labels:
+    app: synapse
+spec:
+  ports:
+  - port: 80
+    targetPort: server-port
+    name: server-port
+  selector:
+    app: synapse
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-service
+  labels:
+    app: synapse
+spec:
+  ports:
+  - port: 80
+    targetPort: client-port
+    name: client-port
+  selector:
+    app: synapse
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: synapse
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  rules:
+  - host: america
+    http:
+      paths:
+      - path: /(.+)
+        backend:
+          serviceName: america-service
+          servicePort: 80
+  - host: client
+    http:
+      paths:
+      - path: /(.+)
+        backend:
+          serviceName: client-service
+          servicePort: 80
